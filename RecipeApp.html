@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        .container {
+            max-width: 960px;
+        }
+        .recipe-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .recipe-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex items-center justify-center min-h-screen">
+
+    <div class="container bg-white rounded-3xl shadow-xl p-6 md:p-10 w-full">
+
+        <div class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Recipe Generator</h1>
+            <p class="text-gray-600">Enter ingredients you have to find recipes!</p>
+            <form id="search-form" class="mt-6 flex flex-col md:flex-row gap-4 items-center">
+                <input id="ingredients-input" type="text" placeholder="e.g., chicken, rice, broccoli" class="flex-1 w-full md:w-auto p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm" />
+                <button type="submit" class="w-full md:w-auto py-4 px-8 bg-indigo-600 text-white font-bold text-lg rounded-xl shadow-md hover:bg-indigo-700 transition-colors">
+                    Find Recipes
+                </button>
+            </form>
+        </div>
+
+        <div id="results-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        </div>
+
+        <div id="no-results-message" class="hidden text-center text-gray-500 mt-10">
+            <p>No recipes found. Try different ingredients!</p>
+        </div>
+
+        <div id="saved-recipes-section" class="mt-12 pt-8 border-t border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Your Saved Recipes</h2>
+            <div id="saved-recipes-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+            <div id="no-saved-recipes-message" class="hidden text-center text-gray-500 mt-10">
+                <p>You haven't saved any recipes yet.</p>
+            </div>
+        </div>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSavedRecipes();
+        });
+
+        function saveRecipe(recipe) {
+            try {
+                if (!recipe || !recipe.id) {
+                    console.error("Attempt to save a recipe with no ID.", recipe);
+                    showTemporaryMessage("Error: Cannot save this recipe.", "red");
+                    return;
+                }
+
+                const cleanRecipe = {
+                    id: recipe.id,
+                    title: recipe.title,
+                    image: recipe.image,
+                    missedIngredients: recipe.missedIngredients
+                };
+
+                let savedRecipes = JSON.parse(localStorage.getItem('savedRecipes')) || [];
+
+                if (!savedRecipes.some(r => r.id === cleanRecipe.id)) {
+                    savedRecipes.push(cleanRecipe);
+                    localStorage.setItem('savedRecipes', JSON.stringify(savedRecipes));
+                    showTemporaryMessage("Recipe saved!", "green");
+                    loadSavedRecipes();
+                } else {
+                    showTemporaryMessage("Recipe is already saved.", "red");
+                }
+            } catch (error) {
+                console.error("Failed to save recipe to local storage:", error);
+                showTemporaryMessage("Error: Failed to save recipe.", "red");
+            }
+        }
+
+        function removeRecipe(recipeId) {
+            let savedRecipes = JSON.parse(localStorage.getItem('savedRecipes')) || [];
+            savedRecipes = savedRecipes.filter(recipe => recipe.id !== recipeId);
+            localStorage.setItem('savedRecipes', JSON.stringify(savedRecipes));
+            showTemporaryMessage("Recipe removed.", "red");
+            loadSavedRecipes();
+        }
+
+        function loadSavedRecipes() {
+            const savedRecipes = JSON.parse(localStorage.getItem('savedRecipes')) || [];
+            const savedRecipesContainer = document.getElementById('saved-recipes-container');
+            const noSavedRecipesMessage = document.getElementById('no-saved-recipes-message');
+
+            savedRecipesContainer.innerHTML = '';
+            if (savedRecipes.length === 0) {
+                noSavedRecipesMessage.classList.remove('hidden');
+            } else {
+                noSavedRecipesMessage.classList.add('hidden');
+                savedRecipes.forEach(recipe => {
+                    const card = createRecipeCard(recipe, true);
+                    savedRecipesContainer.appendChild(card);
+                });
+            }
+        }
+
+        function showTemporaryMessage(message, color) {
+            const messageEl = document.createElement('div');
+            messageEl.textContent = message;
+            messageEl.className = `fixed bottom-5 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-lg transition-all transform duration-300`;
+            messageEl.style.backgroundColor = color === 'green' ? '#10B981' : '#EF4444';
+            messageEl.style.opacity = '0';
+            document.body.appendChild(messageEl);
+
+            setTimeout(() => messageEl.style.opacity = '1', 10);
+            setTimeout(() => {
+                messageEl.style.opacity = '0';
+                setTimeout(() => messageEl.remove(), 500);
+            }, 3000);
+        }
+
+        const API_KEY = "64e03d6ce3c3438a8a64f1ed70368dd5"
+        document.getElementById('search-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const ingredients = document.getElementById('ingredients-input').value;
+            const resultsContainer = document.getElementById('results-container');
+            const noResultsMessage = document.getElementById('no-results-message');
+
+            resultsContainer.innerHTML = '';
+            noResultsMessage.classList.add('hidden');
+            
+            if (!ingredients) {
+                return;
+            }
+
+            try {
+                const formattedIngredients = ingredients.split(' ').join(',');
+                const url = `https://api.spoonacular.com/recipes/findByIngredients?apiKey=${API_KEY}&ingredients=${formattedIngredients}`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    noResultsMessage.classList.remove('hidden');
+                } else {
+                    data.forEach(recipe => {
+                        const recipeCard = createRecipeCard(recipe);
+                        resultsContainer.appendChild(recipeCard);
+                    });
+                }
+
+            } catch (error) {
+                console.error("Error fetching recipes:", error);
+                showTemporaryMessage("An error occurred while fetching recipes.", "red");
+            }
+        });
+
+        function createRecipeCard(recipe, isSaved = false) {
+            const card = document.createElement('div');
+            card.className = "recipe-card bg-gray-50 rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col items-center text-center";
+
+            const image = document.createElement('img');
+            image.src = recipe.image;
+            image.alt = recipe.title;
+            image.className = "w-full h-48 object-cover rounded-xl mb-4";
+            image.onerror = function() {
+                this.onerror = null;
+                this.src = 'https://placehold.co/400x300/e5e7eb/6b7280?text=No+Image';
+            };
+            card.appendChild(image);
+
+            const title = document.createElement('h3');
+            title.className = "text-xl font-semibold text-gray-800 mb-2";
+            title.textContent = recipe.title;
+            card.appendChild(title);
+            
+            const missingIngredientsList = document.createElement('p');
+            missingIngredientsList.className = "text-sm text-gray-500 mb-2 mt-4";
+            if (isSaved) {
+                missingIngredientsList.textContent = "Saved to your list";
+            } else {
+                if (recipe.missedIngredientCount > 0) {
+                    const ingredientsNames = recipe.missedIngredients.map(ing => ing.name).join(', ');
+                    missingIngredientsList.textContent = `Missing: ${ingredientsNames}`;
+                } else {
+                    missingIngredientsList.textContent = `You have all the ingredients!`;
+                    missingIngredientsList.className = "text-sm text-green-600 font-bold mb-2 mt-4";
+                }
+            }
+            card.appendChild(missingIngredientsList);
+
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = "mt-auto w-full flex flex-col gap-2";
+
+            const sourceUrl = `https://www.google.com/search?q=${encodeURIComponent(recipe.title + ' recipe')}`;
+            const link = document.createElement('a');
+            link.href = sourceUrl;
+            link.target = "_blank";
+            link.className = "w-full px-6 py-2 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition-colors shadow text-center";
+            link.textContent = "View Recipe";
+            buttonContainer.appendChild(link);
+            
+            if (!isSaved) {
+                const saveButton = document.createElement('button');
+                saveButton.textContent = "Save Recipe";
+                saveButton.className = "w-full px-6 py-2 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors shadow";
+                saveButton.onclick = () => saveRecipe(recipe);
+                buttonContainer.appendChild(saveButton);
+            } else {
+                const removeButton = document.createElement('button');
+                removeButton.textContent = "Remove Recipe";
+                removeButton.className = "w-full px-6 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors shadow";
+                removeButton.onclick = () => removeRecipe(recipe.id);
+                buttonContainer.appendChild(removeButton);
+            }
+            card.appendChild(buttonContainer);
+
+            return card;
+        }
+    </script>
+</body>
+</html>
